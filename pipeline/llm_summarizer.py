@@ -51,19 +51,34 @@ class LLMSummarizer(BaseProcessor):
         path.write_text(text, encoding="utf-8")
         return path
 
+    def _is_qwen3(self) -> bool:
+        name = self.model.lower()
+        return "qwen3" in name or "qwen3" in name.replace("-", "")
+
     def _summarize(self, text: str) -> str:
         truncated = text[:_MAX_INPUT_CHARS]
         if len(text) > _MAX_INPUT_CHARS:
             truncated += f"\n\n[... 以降 {len(text) - _MAX_INPUT_CHARS} 文字省略 ...]"
 
         prompt = _PROMPT_TEMPLATE.format(text=truncated)
+        body: dict = {"model": self.model, "prompt": prompt, "stream": False}
+
+        # Qwen3 は thinking mode がデフォルトでオン。
+        # 要約タスクでは不要なので /no_think サフィックスで無効化する。
+        if self._is_qwen3():
+            body["prompt"] = prompt + " /no_think"
+
         with httpx.Client(timeout=120.0) as client:
             response = client.post(
                 f"{self.ollama_url}/api/generate",
-                json={"model": self.model, "prompt": prompt, "stream": False},
+                json=body,
             )
             response.raise_for_status()
-            return response.json()["response"].strip()
+            raw = response.json()["response"].strip()
+            # <think>...</think> ブロックが残っている場合は除去
+            import re
+            raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+            return raw
 
     def process(self, text: str) -> tuple[str, bool]:
         if not self.should_apply(text):

@@ -68,12 +68,18 @@ curl http://localhost:11434
 
 ### 推奨モデル（16GB RAM 環境）
 
-| モデル | RAM 使用量 | 特徴 |
-|--------|-----------|------|
-| `qwen2.5:3b` | ~2GB | **デフォルト推奨**。高速で要約タスクに十分 |
-| `gemma3:4b` | ~3GB | Google 製。バランスが良く高品質 |
-| `qwen2.5:7b` | ~4.5GB | より精度が高い要約が必要な場合 |
-| `gemma3:1b` | ~1GB | 最速・最小。精度は落ちる |
+| モデル | RAM目安 | 特徴 |
+|--------|--------|------|
+| `qwen2.5:3b` | ~2GB | **デフォルト推奨**。安定・高速・シンプル |
+| `qwen3:4b` | ~3GB | Qwen2.5より高品質。thinking mode は本プロキシが自動無効化 |
+| `gemma4:e4b` | ~3GB | Google製 Gemma4 の主力軽量モデル。gemma3:4b より高品質 |
+| `gemma4:e2b` | ~1.5GB | Gemma4 の最小版。RAM を節約したい場合のみ |
+| `qwen2.5:7b` | ~4.5GB | 要約精度を上げたい場合 |
+| `gemma3:4b` | ~3GB | 旧世代だが安定。gemma4:e4b が利用可能なら不要 |
+
+> **Qwen3 について**: thinking mode（内部推論）がデフォルトでオンのため、
+> 要約タスクでは無駄なトークンが発生します。本プロキシでは自動的に無効化するため
+> 意識せず使えます。
 
 ### モデルをダウンロード
 
@@ -81,8 +87,9 @@ curl http://localhost:11434
 # デフォルト推奨（qwen2.5:3b）
 docker exec ollama ollama pull qwen2.5:3b
 
-# 代替モデル（両方入れて比較も可能）
-docker exec ollama ollama pull gemma3:4b
+# より高品質な代替（どちらかお好みで）
+docker exec ollama ollama pull qwen3:4b
+docker exec ollama ollama pull gemma4:e4b
 ```
 
 ### ダウンロード確認

@@ -10,11 +10,17 @@ originals_dir: "originals"
 ollama_url: "http://localhost:11434"
 
 # 使用モデル（1行変更で切り替え可能）
+#
 # 推奨モデル（16GB RAM 環境）:
-#   qwen2.5:3b  - 高速・省メモリ (~2GB)・要約タスクに十分  ← デフォルト
-#   qwen2.5:7b  - より高品質・要約精度向上 (~4.5GB)
-#   gemma3:4b   - Google製・バランス良好 (~3GB)
-#   gemma3:1b   - 最速・最小 (~1GB)・精度は落ちる
+#   qwen2.5:3b   - 安定・高速・省メモリ (~2GB)。シンプルに使いたいならこれ ← デフォルト
+#   qwen3:4b     - Qwen2.5より高品質。thinking mode を自動無効化して使用 (~3GB)
+#   gemma4:e4b   - Google製の最新軽量モデル (Effective 4B, ~3GB)。gemma3:4b より高品質
+#   gemma4:e2b   - さらに軽量 (Effective 2B, ~1.5GB)。品質は落ちる・RAM節約優先の場合
+#   qwen2.5:7b   - 要約精度を上げたい場合 (~4.5GB)
+#   gemma3:4b    - 旧世代だが安定した品質 (~3GB)
+#
+# ※ Qwen3 は thinking mode (内部推論) がデフォルトでオン。本プロキシでは
+#   /no_think サフィックスで自動的に無効化するため余分なトークンは発生しない。
 model: "qwen2.5:3b"
 
 # パイプラインステージ（実行順。不要なものはコメントアウト）
