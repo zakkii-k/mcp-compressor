@@ -1,0 +1,25 @@
+[project]
+name = "mcp-summarizer"
+version = "0.1.0"
+description = "MCP response summarizer proxy — reduces token usage by intercepting large MCP tool results"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "python-toon>=0.1.3",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+mcp-summarizer = "mcp_proxy:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["pipeline"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
