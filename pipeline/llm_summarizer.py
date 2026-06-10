@@ -80,8 +80,21 @@ class LLMSummarizer(BaseProcessor):
             raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
             return raw
 
+    def _is_ollama_running(self) -> bool:
+        try:
+            with httpx.Client(timeout=3.0) as client:
+                r = client.get(f"{self.ollama_url}")
+                return r.status_code == 200
+        except Exception:
+            return False
+
     def process(self, text: str) -> tuple[str, bool]:
         if not self.should_apply(text):
+            return text, False
+
+        # Ollama が起動していなければ LLM ステップをスキップ（前段の圧縮結果をそのまま返す）
+        if not self._is_ollama_running():
+            logger.warning("Ollama が起動していないため LLM 要約をスキップ: %s", self.ollama_url)
             return text, False
 
         original_path = self._save_original(text)
@@ -96,9 +109,5 @@ class LLMSummarizer(BaseProcessor):
             return result, True
         except Exception as e:
             logger.warning("LLM要約失敗 (%s): %s", type(e).__name__, e)
-            # 失敗時は元データの先頭を返す（要約なし）
-            fallback = text[: self.threshold_chars]
-            return (
-                f"[要約失敗: {e} | 元データ: {original_path}]\n\n{fallback}",
-                False,
-            )
+            # 失敗時は元テキストをそのまま返す（エラーメッセージで汚染しない）
+            return text, False
