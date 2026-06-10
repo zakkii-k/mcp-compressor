@@ -85,6 +85,19 @@ model: "qwen2.5:7b"
 
 ## Step 2: Python 環境のセットアップ
 
+### pyenv と uv どちらを使うか
+
+| | pyenv + pip | uv |
+|--|------------|-----|
+| **概要** | Python バージョン管理 + pip でパッケージ管理 | Python バージョン管理・パッケージ管理・仮想環境を一括で担う Rust 製ツール |
+| **インストール速度** | 普通 | pip より **10〜100倍速い** |
+| **仮想環境** | 自分で `venv` を作って管理 | 自動で `.venv` を作って管理 |
+| **既存環境との相性** | pyenv を使っているならそのまま使える | 新規プロジェクトや CI 向き |
+| **このプロジェクトでの使い方** | `pip install httpx pyyaml python-toon` | `uv sync`（1コマンドで完結） |
+
+**pyenv を使っているならそのまま pyenv + pip で問題ありません。**
+uv の主な利点は速度と仮想環境の自動管理ですが、このプロジェクトでは依存が3つだけなので差はほぼ出ません。
+
 ---
 
 ### Windows の場合
@@ -122,6 +135,18 @@ python --version       # Python 3.11.9 と表示されればOK
 cd C:\Users\yourname\projects\mcp-compressor
 pip install httpx pyyaml python-toon
 ```
+
+> **uv を使う場合:**
+> ```powershell
+> # uv のインストール（未インストールなら）
+> irm https://astral.sh/uv/install.ps1 | iex
+>
+> # 依存パッケージ + 仮想環境をまとめてセットアップ
+> uv sync
+>
+> # 実行時は python の代わりに uv run python を使う
+> uv run python mcp_proxy.py --help
+> ```
 
 #### 2-W4. 動作確認
 
@@ -167,6 +192,18 @@ python --version       # Python 3.11.9 と表示されればOK
 cd ~/projects/mcp-compressor
 pip install httpx pyyaml python-toon
 ```
+
+> **uv を使う場合:**
+> ```bash
+> # uv のインストール（未インストールなら）
+> curl -Ls https://astral.sh/uv/install.sh | sh
+>
+> # 依存パッケージ + 仮想環境をまとめてセットアップ
+> uv sync
+>
+> # 実行時は python の代わりに uv run python を使う
+> uv run python mcp_proxy.py --help
+> ```
 
 #### 2-L4. 動作確認
 
@@ -222,6 +259,20 @@ VS Code が Windows 側で動いているため、Windows のパスを直接指�
 > `python` で pyenv-win の Python が使われるよう、`pyenv local 3.11.9` を
 > mcp-compressor ディレクトリで実行しておくこと。
 
+> **uv を使う場合の MCP 設定:**
+> ```json
+> {
+>   "command": "uv",
+>   "args": [
+>     "run", "--project", "C:\\Users\\yourname\\projects\\mcp-compressor",
+>     "python", "mcp_proxy.py",
+>     "--config", "C:\\Users\\yourname\\projects\\mcp-compressor\\config.yaml",
+>     "--",
+>     "node", "C:\\path\\to\\mcp-server.js"
+>   ]
+> }
+> ```
+
 ---
 
 ### WSL の場合（Windows 側の VS Code から）
@@ -250,6 +301,21 @@ VS Code が Windows 側で動いているため `wsl -e` を挟みます。
 
 > WSL 内で pyenv を使っている場合、`wsl -e python` は pyenv の Python を使います。
 > ただし WSL の初期化が毎回走るため、Windows 側に置く方法より若干起動が遅いです。
+
+> **uv を使う場合の MCP 設定（WSL）:**
+> ```json
+> {
+>   "command": "wsl",
+>   "args": [
+>     "-e", "uv", "run",
+>     "--project", "/home/yourname/projects/mcp-compressor",
+>     "python", "mcp_proxy.py",
+>     "--config", "/home/yourname/projects/mcp-compressor/config.yaml",
+>     "--",
+>     "node", "/path/to/mcp-server.js"
+>   ]
+> }
+> ```
 
 ---
 
