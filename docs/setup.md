@@ -83,7 +83,90 @@ model: "qwen2.5:7b"
 
 ---
 
-## Step 2: Python 環境のセットアップ
+## Step 2: proxy のセットアップ（Docker または Python ネイティブ）
+
+proxy の実行方法は2通りあります。
+
+| | Docker | Python ネイティブ |
+|--|--------|-----------------|
+| **Python 環境** | 不要 | pyenv 等で用意 |
+| **配布のしやすさ** | `docker pull` だけで使える | 各自 pip install が必要 |
+| **起動速度** | 数秒（コンテナ起動分） | 即時 |
+| **向いている用途** | チームで共有・配布 | 個人利用・開発中 |
+
+---
+
+### Docker を使う場合
+
+#### 2-D1. イメージをビルド
+
+```bash
+git clone https://github.com/zakkii-k/mcp-compressor.git
+cd mcp-compressor
+docker build -t mcp-compressor .
+```
+
+#### 2-D2. 動作確認
+
+```bash
+docker run --rm mcp-compressor --help
+```
+
+#### 2-D3. VS Code の MCP 設定
+
+Docker で起動する場合、`command` に `docker` を指定します。
+
+**Windows:**
+
+```json
+{
+  "servers": {
+    "my-mcp-server": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "mcp-compressor",
+        "--",
+        "node", "C:\\path\\to\\mcp-server.js"
+      ]
+    }
+  }
+}
+```
+
+**WSL:**
+
+```json
+{
+  "servers": {
+    "my-mcp-server": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "mcp-compressor",
+        "--",
+        "node", "/path/to/mcp-server.js"
+      ]
+    }
+  }
+}
+```
+
+> **originals（要約前の元データ）を保存したい場合:**
+> コンテナが終了すると中のファイルは消えるため、ボリュームをマウントします。
+> ```bash
+> docker run --rm -i -v ./originals:/app/originals mcp-compressor -- node ...
+> ```
+
+> **Ollama への接続:** Dockerfile に `ENV OLLAMA_URL=http://host.docker.internal:11434`
+> が設定されているため、Windows / Mac では自動で host の Ollama に繋がります。
+> Linux で `--network host` を使う場合は `localhost` でも接続できます。
+
+---
+
+## Step 2（続き）: Python 環境のセットアップ（ネイティブの場合）
 
 ### pyenv と uv どちらを使うか
 

@@ -1,0 +1,17 @@
+# Ollama を docker-compose で管理する設定
+#
+# proxy（mcp_proxy.py）は VS Code が必要に応じて起動するため
+# 常駐サービスとしてではなく docker run -i で使用する。
+# → docs/setup.md の「Docker を使う場合」を参照
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
