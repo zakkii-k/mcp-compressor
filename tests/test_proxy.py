@@ -215,3 +215,96 @@ class TestLLMSummarizer:
         assert originals, "元データファイルが保存されていない"
         content = originals[0].read_text()
         assert "セクション" in content
+
+
+# ─────────────────────────────────────────
+# wrap モードのテスト（Ollama 不要）
+# ─────────────────────────────────────────
+
+class TestWrapProxy:
+    """wrap モード: 複数サーバーを束ねて1つの MCP として見せるテスト。"""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, tmp_path):
+        import yaml
+        # パイプラインなし（圧縮動作は別テストで確認済み）
+        cfg = {
+            "threshold_chars": 99999,
+            "originals_dir": str(tmp_path / "originals"),
+            "pipeline": [],
+        }
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text(yaml.dump(cfg))
+        self.config_path = str(config_path)
+
+        # モックサーバーを2台定義した mcp.servers.json
+        servers_config = {
+            "servers": {
+                "server_a": {
+                    "type": "stdio",
+                    "command": sys.executable,
+                    "args": [str(MOCK_SERVER)],
+                },
+                "server_b": {
+                    "type": "stdio",
+                    "command": sys.executable,
+                    "args": [str(MOCK_SERVER)],
+                },
+            }
+        }
+        servers_path = tmp_path / "mcp.servers.json"
+        servers_path.write_text(json.dumps(servers_config))
+        self.servers_path = str(servers_path)
+        self.tmp_path = tmp_path
+
+    def _run_wrap_session(self, tool_name: str) -> dict:
+        cmd = [
+            PYTHON, "-m", "mcp_compressor",
+            "--mode", "wrap",
+            "--mcp-config", self.servers_path,
+            "--config", self.config_path,
+        ]
+        messages = [MCP_INIT, MCP_INITIALIZED, MCP_TOOLS_LIST,
+                    build_tool_call(tool_name)]
+        stdin_data = "\n".join(json.dumps(m) for m in messages) + "\n"
+        result = subprocess.run(
+            cmd, input=stdin_data.encode(), capture_output=True,
+            timeout=30, cwd=ROOT,
+        )
+        responses = {}
+        for line in result.stdout.decode().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                msg = json.loads(line)
+                if "id" in msg:
+                    responses[msg["id"]] = msg
+            except json.JSONDecodeError:
+                pass
+        return responses
+
+    def test_tools_are_prefixed(self):
+        """ツール名がサーバー名でプレフィックスされる。"""
+        responses = self._run_wrap_session("server_a__get_small_response")
+        assert 2 in responses
+        tools = responses[2]["result"]["tools"]
+        names = [t["name"] for t in tools]
+        # 2台のモックサーバーのツールが両方プレフィックス付きで返る
+        assert any(n.startswith("server_a__") for n in names)
+        assert any(n.startswith("server_b__") for n in names)
+
+    def test_tool_call_routed_correctly(self):
+        """プレフィックスで正しいサーバーにルーティングされる。"""
+        responses = self._run_wrap_session("server_a__get_small_response")
+        assert 3 in responses
+        content = responses[3]["result"]["content"]
+        text = next(c["text"] for c in content if c.get("type") == "text")
+        assert "OK" in text
+
+    def test_tool_descriptions_show_server(self):
+        """ツールの説明にサーバー名が付く。"""
+        responses = self._run_wrap_session("server_a__get_small_response")
+        tools = responses[2]["result"]["tools"]
+        server_a_tools = [t for t in tools if t["name"].startswith("server_a__")]
+        assert all("[server_a]" in t.get("description", "") for t in server_a_tools)

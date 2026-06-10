@@ -118,12 +118,48 @@ pipeline:
 | ログ先頭/エラー/末尾 | 60〜80% | ✅ |
 | LLM 要約 | 70〜90% | ❌（Ollama 必要） |
 
+## 動作モード
+
+### stdio モード（デフォルト）
+
+既存の MCP サーバーを1つずつラップする。
+
+```json
+{ "command": "python", "args": ["-m", "mcp_compressor", "--", "node", "server.js"] }
+```
+
+### wrap モード
+
+全 MCP サーバーを束ねて Copilot に1つのサーバーとして見せる。
+内部・外部（Atlassian 等）問わず一箇所でインターセプトできる。
+
+**セットアップ:**
+
+1. 既存の `.vscode/mcp.json` の内容を `mcp.servers.json` にコピー
+2. `.vscode/mcp.json` を書き換え:
+
+```json
+{
+  "servers": {
+    "mcp-compressor": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "mcp_compressor", "--mode", "wrap", "--mcp-config", "mcp.servers.json"]
+    }
+  }
+}
+```
+
+ツール名は `{サーバー名}__{ツール名}` 形式（例: `filesystem__read_file`、`atlassian__create_issue`）。
+
+`mcp.servers.example.json` を参考にしてください。
+
 ## 対応 MCP
 
 | 種別 | 例 | 対応状況 |
 |------|-----|---------|
 | stdio（ローカル） | mcp-server-filesystem, mcp-server-fetch | ✅ 対応済み |
-| HTTP/SSE（外部） | Atlassian, GitHub 等 | 🚧 未実装 |
+| HTTP/SSE（外部） | Atlassian, GitHub 等 | ✅ wrap モードで対応 |
 
 ## テスト
 

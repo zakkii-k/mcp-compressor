@@ -37,8 +37,12 @@ def parse_args() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description="MCP Response Summarizer Proxy")
     parser.add_argument(
-        "--mode", choices=["stdio", "http"], default="stdio",
-        help="プロキシモード: stdio=ローカルMCP（デフォルト）/ http=外部MCP（未実装）",
+        "--mode", choices=["stdio", "http", "wrap"], default="stdio",
+        help="プロキシモード: stdio=ローカルMCP（デフォルト）/ wrap=全MCPを束ねる / http=外部MCP（未実装）",
+    )
+    parser.add_argument(
+        "--mcp-config", default="mcp.servers.json",
+        help="wrap モード時に読むサーバー設定ファイルのパス（デフォルト: mcp.servers.json）",
     )
     parser.add_argument("--config", default="config.yaml", help="設定ファイルのパス")
     parser.add_argument("--log-level", default="WARNING", help="ログレベル (DEBUG/INFO/WARNING/ERROR)")
@@ -62,6 +66,9 @@ def main() -> None:
     if args.mode == "stdio":
         from mcp_compressor.proxy.stdio_proxy import StdioProxy
         StdioProxy(args, pipeline).run()
+    elif args.mode == "wrap":
+        from mcp_compressor.proxy.wrap_proxy import WrapProxy
+        WrapProxy(args, pipeline).run()
     elif args.mode == "http":
         from mcp_compressor.proxy.http_proxy import HTTPProxy
         HTTPProxy(args, pipeline).run()
