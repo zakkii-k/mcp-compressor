@@ -44,6 +44,10 @@ def parse_args() -> argparse.Namespace:
         "--mcp-config", default="mcp.servers.json",
         help="wrap モード時に読むサーバー設定ファイルのパス（デフォルト: mcp.servers.json）",
     )
+    parser.add_argument(
+        "--no-meta-tools", dest="meta_tools", action="store_false", default=True,
+        help="wrap モードでプレフィックス方式を使う（デフォルト: メタツール方式）",
+    )
     parser.add_argument("--config", default="config.yaml", help="設定ファイルのパス")
     parser.add_argument("--log-level", default="WARNING", help="ログレベル (DEBUG/INFO/WARNING/ERROR)")
     parser.add_argument("--port", type=int, default=8080, help="HTTP モード時のリスンポート（未実装）")

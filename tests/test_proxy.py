@@ -284,27 +284,117 @@ class TestWrapProxy:
                 pass
         return responses
 
-    def test_tools_are_prefixed(self):
-        """ツール名がサーバー名でプレフィックスされる。"""
-        responses = self._run_wrap_session("server_a__get_small_response")
-        assert 2 in responses
+    # ── メタツール方式（デフォルト）──
+
+    def test_meta_tools_only_two(self):
+        """tools/list はメタツール2つだけ返す。"""
+        responses = self._run_wrap_session("mcp__list_tools")
         tools = responses[2]["result"]["tools"]
         names = [t["name"] for t in tools]
-        # 2台のモックサーバーのツールが両方プレフィックス付きで返る
+        assert names == ["mcp__list_tools", "mcp__invoke_tool"]
+
+    def test_meta_tools_description_has_server_info(self):
+        """mcp__list_tools の description にサーバー名が含まれる。"""
+        responses = self._run_wrap_session("mcp__list_tools")
+        tools = responses[2]["result"]["tools"]
+        list_tool = next(t for t in tools if t["name"] == "mcp__list_tools")
+        assert "server_a" in list_tool["description"]
+        assert "server_b" in list_tool["description"]
+
+    def test_list_tools_returns_all(self):
+        """mcp__list_tools（query なし）で全ツールが返る。"""
+        responses = self._run_wrap_session("mcp__list_tools")
+        text = responses[3]["result"]["content"][0]["text"]
+        data = json.loads(text)
+        servers = {item["server"] for item in data}
+        assert "server_a" in servers
+        assert "server_b" in servers
+
+    def test_list_tools_with_query(self):
+        """mcp__list_tools（query あり）で絞り込まれる。"""
+        msgs = [MCP_INIT, MCP_INITIALIZED, MCP_TOOLS_LIST, {
+            "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+            "params": {"name": "mcp__list_tools", "arguments": {"query": "server_a"}},
+        }]
+        cmd = [PYTHON, "-m", "mcp_compressor", "--mode", "wrap",
+               "--mcp-config", self.servers_path, "--config", self.config_path]
+        result = subprocess.run(
+            cmd,
+            input=("\n".join(json.dumps(m) for m in msgs) + "\n").encode(),
+            capture_output=True, timeout=30, cwd=ROOT,
+        )
+        for line in result.stdout.decode().splitlines():
+            try:
+                msg = json.loads(line.strip())
+                if msg.get("id") == 3:
+                    text = msg["result"]["content"][0]["text"]
+                    data = json.loads(text)
+                    servers = {item["server"] for item in data}
+                    assert servers == {"server_a"}
+                    return
+            except (json.JSONDecodeError, KeyError):
+                pass
+        pytest.fail("mcp__list_tools レスポンスが取得できなかった")
+
+    def test_invoke_tool_routes_correctly(self):
+        """mcp__invoke_tool で正しいサーバーにルーティングされる。"""
+        msgs = [MCP_INIT, MCP_INITIALIZED, MCP_TOOLS_LIST, {
+            "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+            "params": {
+                "name": "mcp__invoke_tool",
+                "arguments": {"server": "server_a", "tool": "get_small_response", "arguments": {}},
+            },
+        }]
+        cmd = [PYTHON, "-m", "mcp_compressor", "--mode", "wrap",
+               "--mcp-config", self.servers_path, "--config", self.config_path]
+        result = subprocess.run(
+            cmd,
+            input=("\n".join(json.dumps(m) for m in msgs) + "\n").encode(),
+            capture_output=True, timeout=30, cwd=ROOT,
+        )
+        for line in result.stdout.decode().splitlines():
+            try:
+                msg = json.loads(line.strip())
+                if msg.get("id") == 3:
+                    text = msg["result"]["content"][0]["text"]
+                    assert "OK" in text
+                    return
+            except (json.JSONDecodeError, KeyError):
+                pass
+        pytest.fail("mcp__invoke_tool レスポンスが取得できなかった")
+
+    # ── プレフィックス方式（--no-meta-tools）──
+
+    def _run_prefix_session(self, tool_name: str) -> dict:
+        cmd = [PYTHON, "-m", "mcp_compressor", "--mode", "wrap",
+               "--no-meta-tools", "--mcp-config", self.servers_path,
+               "--config", self.config_path]
+        messages = [MCP_INIT, MCP_INITIALIZED, MCP_TOOLS_LIST, build_tool_call(tool_name)]
+        result = subprocess.run(
+            cmd,
+            input=("\n".join(json.dumps(m) for m in messages) + "\n").encode(),
+            capture_output=True, timeout=30, cwd=ROOT,
+        )
+        responses = {}
+        for line in result.stdout.decode().splitlines():
+            try:
+                msg = json.loads(line.strip())
+                if "id" in msg:
+                    responses[msg["id"]] = msg
+            except json.JSONDecodeError:
+                pass
+        return responses
+
+    def test_prefix_mode_tools_are_prefixed(self):
+        """--no-meta-tools 時はプレフィックス付きで全ツールが返る。"""
+        responses = self._run_prefix_session("server_a__get_small_response")
+        tools = responses[2]["result"]["tools"]
+        names = [t["name"] for t in tools]
         assert any(n.startswith("server_a__") for n in names)
         assert any(n.startswith("server_b__") for n in names)
 
-    def test_tool_call_routed_correctly(self):
-        """プレフィックスで正しいサーバーにルーティングされる。"""
-        responses = self._run_wrap_session("server_a__get_small_response")
-        assert 3 in responses
-        content = responses[3]["result"]["content"]
-        text = next(c["text"] for c in content if c.get("type") == "text")
+    def test_prefix_mode_routing(self):
+        """--no-meta-tools 時はプレフィックスでルーティングされる。"""
+        responses = self._run_prefix_session("server_a__get_small_response")
+        text = responses[3]["result"]["content"][0]["text"]
         assert "OK" in text
-
-    def test_tool_descriptions_show_server(self):
-        """ツールの説明にサーバー名が付く。"""
-        responses = self._run_wrap_session("server_a__get_small_response")
-        tools = responses[2]["result"]["tools"]
-        server_a_tools = [t for t in tools if t["name"].startswith("server_a__")]
-        assert all("[server_a]" in t.get("description", "") for t in server_a_tools)
