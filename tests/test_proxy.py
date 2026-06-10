@@ -12,7 +12,6 @@ import pytest
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-PROXY = ROOT / "mcp_proxy.py"
 MOCK_SERVER = Path(__file__).parent / "mock_server.py"
 PYTHON = sys.executable
 
@@ -45,7 +44,7 @@ def build_tool_call(tool_name: str, call_id: int = 3) -> dict:
 
 def run_proxy_session(tool_name: str, config_path: str | None = None) -> dict:
     """プロキシ経由でツールを呼び出し、id→レスポンスの辞書を返す。"""
-    cmd = [PYTHON, str(PROXY)]
+    cmd = [PYTHON, "-m", "mcp_compressor"]
     if config_path:
         cmd += ["--config", config_path]
     cmd += ["--", PYTHON, str(MOCK_SERVER)]
@@ -140,7 +139,7 @@ class TestPipelineWithoutLLM:
 
     def test_log_deduplicator(self):
         """繰り返しパターンのログが集約される。"""
-        from pipeline.log_deduplicator import LogDeduplicator
+        from mcp_compressor.pipeline.log_deduplicator import LogDeduplicator
         dedup = LogDeduplicator()
         log_text = "\n".join(
             f"2024-06-10 INFO Processing item {i}/200 - status=OK" for i in range(1, 101)
@@ -154,7 +153,7 @@ class TestPipelineWithoutLLM:
     def test_json_table_converter(self):
         """JSON配列がMarkdownテーブルに変換される。"""
         import json
-        from pipeline.json_table_converter import JSONTableConverter
+        from mcp_compressor.pipeline.json_table_converter import JSONTableConverter
         converter = JSONTableConverter()
         data = [{"id": i, "name": f"User{i}", "email": f"u{i}@example.com"} for i in range(1, 20)]
         text = json.dumps(data, indent=2)
@@ -166,7 +165,7 @@ class TestPipelineWithoutLLM:
     def test_toon_converter(self):
         """JSON が TOON 形式に変換され、サイズが削減される。"""
         import json
-        from pipeline.toon_converter import ToonConverter, _TOON_AVAILABLE
+        from mcp_compressor.pipeline.toon_converter import ToonConverter, _TOON_AVAILABLE
         if not _TOON_AVAILABLE:
             pytest.skip("python-toon が未インストール")
         converter = ToonConverter()

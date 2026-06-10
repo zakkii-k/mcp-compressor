@@ -1,7 +1,7 @@
 [project]
-name = "mcp-summarizer"
+name = "mcp-compressor"
 version = "0.1.0"
-description = "MCP response summarizer proxy — reduces token usage by intercepting large MCP tool results"
+description = "MCP response compressor proxy — reduces token usage by intercepting large MCP tool results"
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",
@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mcp-summarizer = "mcp_proxy:main"
+mcp-compressor = "mcp_compressor.main:main"
 
 [dependency-groups]
 dev = [
@@ -18,7 +18,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["pipeline"]
+packages = ["mcp_compressor"]
 
 [build-system]
 requires = ["hatchling"]

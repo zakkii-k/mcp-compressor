@@ -21,4 +21,4 @@ COPY . .
 # Linux (--network host の場合): localhost でも到達できるが統一のためこちらを使用
 ENV OLLAMA_URL=http://host.docker.internal:11434
 
-ENTRYPOINT ["python", "mcp_proxy.py"]
+ENTRYPOINT ["python", "-m", "mcp_compressor"]

@@ -3,20 +3,19 @@
 
 Usage:
   stdio モード（ローカル MCP サーバー用）:
-    python mcp_proxy.py [--config config.yaml] -- <server_command> [args...]
+    python -m mcp_compressor [--config config.yaml] -- <server_command> [args...]
 
   http モード（外部 MCP サーバー用・未実装）:
-    python mcp_proxy.py --mode http [--port 8080]
+    python -m mcp_compressor --mode http [--port 8080]
 
 Examples:
-    python mcp_proxy.py -- node /path/to/mcp-server.js
-    python mcp_proxy.py --config my_config.yaml -- uvx mcp-server-fetch
+    python -m mcp_compressor -- node /path/to/mcp-server.js
+    python -m mcp_compressor --config my_config.yaml -- uvx mcp-server-fetch
 """
 
 import argparse
 import logging
 import sys
-from pathlib import Path
 
 
 def setup_logging(level: str = "WARNING") -> None:
@@ -54,18 +53,17 @@ def main() -> None:
     args = parse_args()
     setup_logging(args.log_level)
 
-    sys.path.insert(0, str(Path(__file__).parent))
-    from config import load_config
-    from pipeline import build_pipeline
+    from mcp_compressor.config import load_config
+    from mcp_compressor.pipeline import build_pipeline
 
     config = load_config(args.config)
     pipeline = build_pipeline(config)
 
     if args.mode == "stdio":
-        from proxy.stdio_proxy import StdioProxy
+        from mcp_compressor.proxy.stdio_proxy import StdioProxy
         StdioProxy(args, pipeline).run()
     elif args.mode == "http":
-        from proxy.http_proxy import HTTPProxy
+        from mcp_compressor.proxy.http_proxy import HTTPProxy
         HTTPProxy(args, pipeline).run()
 
 
