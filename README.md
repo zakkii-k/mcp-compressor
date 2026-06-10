@@ -74,25 +74,58 @@ mcp__invoke_tool(server, tool, args) ← ツールを実行する
 
 ### 1. Ollama を起動
 
+WSL または PowerShell どちらでも同じ（Rancher Desktop が起動していれば `docker` が使える）:
+
 ```bash
 docker compose up -d
 docker exec ollama ollama pull qwen2.5:3b
 ```
 
-### 2. インストール
+### 2. mcp-compressor のインストール
 
-**Python ネイティブ（pyenv + pip）:**
+3通りある。**Docker が一番シンプル**。
+
+---
+
+#### A. Docker（推奨・Python 環境不要）
+
+```bash
+git clone https://github.com/zakkii-k/mcp-compressor.git
+cd mcp-compressor
+docker build -t mcp-compressor .
+```
+
+VS Code の MCP 設定で `docker run` を指定するだけで動く。
+
+---
+
+#### B. Windows ネイティブ Python（VS Code が Windows 側の場合）
+
+VS Code が Windows で動いているなら、Python も Windows 側に置くのがシンプル。
+MCP 設定に `python` を直接書けばいい。
+
+```powershell
+# PowerShell または WSL から
+git clone https://github.com/zakkii-k/mcp-compressor.git
+cd mcp-compressor
+
+# pyenv-win でバージョン指定（インストール済みの場合）
+pyenv local 3.11.9
+
+pip install httpx pyyaml python-toon
+```
+
+---
+
+#### C. WSL 内 Python（VS Code が Windows 側の場合は非推奨）
+
+WSL 内に置くと MCP 設定で `wsl -e python ...` を挟む必要があり冗長になる。
+WSL で VS Code を開いて開発する場合（`code .` を WSL から実行）は問題ない。
 
 ```bash
 git clone https://github.com/zakkii-k/mcp-compressor.git
 cd mcp-compressor
 pip install httpx pyyaml python-toon
-```
-
-**Docker（Python 環境不要）:**
-
-```bash
-docker build -t mcp-compressor .
 ```
 
 ---
