@@ -1,4 +1,4 @@
-# MCP Summarizer セットアップガイド
+# MCP Compressor セットアップガイド
 
 GitHub Copilot の MCP レスポンスをローカル LLM で要約し、トークン消費を削減するプロキシのセットアップ手順です。
 
@@ -8,8 +8,8 @@ GitHub Copilot の MCP レスポンスをローカル LLM で要約し、トー�
 GitHub Copilot → mcp_proxy.py → 実際の MCP サーバー
                      ↓（レスポンスをインターセプト）
                  パイプライン処理
-                   1. JSON 圧縮（minify）
-                   2. ログ圧縮（先頭/エラー/末尾を抽出）
+                   1. TOON 変換 / JSON 圧縮
+                   2. ログ重複除去 / ログ圧縮
                    3. LLM 要約（Ollama 経由、閾値超えのみ）
                      ↓
                  GitHub Copilot へ返却
@@ -17,132 +17,176 @@ GitHub Copilot → mcp_proxy.py → 実際の MCP サーバー
 
 ---
 
-## 前提条件
+## Step 1: Ollama のセットアップ（共通）
 
-- Windows 11 + PowerShell
-- Rancher Desktop（インストール済み）
-- Python 3.11 以上（WSL2 内 or Windows 直接）
-
----
-
-## Step 1: Ollama のセットアップ（Rancher Desktop / Docker）
+Ollama は Docker コンテナで動かします。Rancher Desktop が起動していれば `docker` コマンドが使えます。
+**Windows / WSL どちらから実行しても同じです。**
 
 ### 1-1. Ollama コンテナを起動
 
-PowerShell で実行:
-
-```powershell
-# Ollama コンテナを起動（GPU なし・CPU モード）
-docker run -d `
-  --name ollama `
-  -p 11434:11434 `
-  -v ollama_data:/root/.ollama `
-  --restart unless-stopped `
+```bash
+docker run -d \
+  --name ollama \
+  -p 11434:11434 \
+  -v ollama_data:/root/.ollama \
+  --restart unless-stopped \
   ollama/ollama:latest
 ```
 
-> **GPU (NVIDIA) を使う場合（VRAM が使えるとさらに高速）:**
+> **PowerShell の場合はバックスラッシュをバッククォートに変える:**
 > ```powershell
 > docker run -d `
 >   --name ollama `
 >   -p 11434:11434 `
 >   -v ollama_data:/root/.ollama `
 >   --restart unless-stopped `
->   --gpus all `
 >   ollama/ollama:latest
 > ```
 
-### 1-2. 起動確認
+起動確認:
 
-```powershell
-docker ps
-# ollama コンテナが "Up" になっていれば OK
-
-curl http://localhost:11434
-# {"status":"Ollama is running"} が返ればOK
+```bash
+docker ps                  # ollama が Up になっていれば OK
+curl http://localhost:11434  # {"status":"Ollama is running"} が返ればOK
 ```
 
----
+### 1-2. モデルをダウンロード
 
-## Step 2: モデルのダウンロード
+| 品質順 | モデル | ストレージ | RAM使用 | 特徴 |
+|:------:|--------|-----------|--------|------|
+| 1 | `qwen2.5:7b` | ~4.7GB | ~4.5GB | **要約タスク最高品質** |
+| 2 | `qwen3:4b` | ~2.6GB | ~3GB | 本プロキシが thinking mode を自動無効化して使用 |
+| 2 | `gemma4:e4b` | ~2.9GB | ~3GB | Google製 Gemma4 の主力軽量モデル |
+| 4 | `qwen2.5:3b` | ~2GB | ~2GB | **デフォルト推奨**。安定・高速 |
+| 5 | `gemma3:4b` | ~2.9GB | ~3GB | 旧世代だが安定 |
+| 6 | `gemma4:e2b` | ~1.6GB | ~1.5GB | RAM節約優先の場合のみ |
 
-### 推奨モデル（16GB RAM 環境）
+> モデルは Docker ボリューム（PC のストレージ）に保存されます。
+> コンテナを再作成してもモデルは消えません。
+> Ollama はリクエストが来た時点でモデルをメモリにロードするため、
+> モデルの「起動」操作は不要です。
 
-| 品質順 | モデル | RAM目安 | 特徴 |
-|:------:|--------|--------|------|
-| 1 | `qwen2.5:7b` | ~4.5GB | **要約タスク最高品質**。RAM に余裕があればこれ |
-| 2 | `qwen3:4b` | ~3GB | 本プロキシが thinking mode を自動無効化して使用。無効化するとqwen2.5と同系統の品質感になるため7b超えは難しい |
-| 2 | `gemma4:e4b` | ~3GB | Google製 Gemma4 の主力軽量モデル |
-| 4 | `qwen2.5:3b` | ~2GB | **デフォルト推奨**。安定・高速・シンプル |
-| 5 | `gemma3:4b` | ~3GB | 旧世代だが安定。gemma4:e4b が使えるなら不要 |
-| 6 | `gemma4:e2b` | ~1.5GB | RAM を節約したい場合のみ |
+まとめて pull しておくのがおすすめ（全部で約14GB）:
 
-> **qwen3 について**: 主な強みは thinking mode（推論・数学・コーディング）。
-> 要約タスクでは thinking を無効化するためその優位性が消え、
-> パラメータ数が多い qwen2.5:7b の方が素直に品質が高い。
-
-> **Qwen3 について**: thinking mode（内部推論）がデフォルトでオンのため、
-> 要約タスクでは無駄なトークンが発生します。本プロキシでは自動的に無効化するため
-> 意識せず使えます。
-
-### モデルをダウンロード
-
-```powershell
-# デフォルト推奨（qwen2.5:3b）
+```bash
 docker exec ollama ollama pull qwen2.5:3b
-
-# より高品質な代替（どちらかお好みで）
+docker exec ollama ollama pull qwen2.5:7b
 docker exec ollama ollama pull qwen3:4b
 docker exec ollama ollama pull gemma4:e4b
 ```
 
-### ダウンロード確認
-
-```powershell
-docker exec ollama ollama list
-```
-
-### モデルの切り替え方
-
-`config.yaml` の `model:` を変更するだけです:
+モデルの切り替えは `config.yaml` の 1 行だけ:
 
 ```yaml
-# qwen2.5:3b から gemma3:4b に切り替える場合
-model: "gemma3:4b"
+model: "qwen2.5:7b"
 ```
 
 ---
 
-## Step 3: Python 環境のセットアップ
+## Step 2: Python 環境のセットアップ
 
-### 3-1. uv のインストール（推奨）
+---
 
-```powershell
-# PowerShell
-irm https://astral.sh/uv/install.ps1 | iex
-```
+### Windows の場合
 
-### 3-2. 依存パッケージのインストール
+#### 2-W1. リポジトリをクローン
 
 ```powershell
-cd C:\path\to\mcp-summarizer   # このリポジトリのパス
-uv sync
+cd C:\Users\yourname\projects   # 任意のディレクトリ
+git clone https://github.com/zakkii-k/mcp-compressor.git
+cd mcp-compressor
 ```
 
-WSL2 を使っている場合:
+#### 2-W2. Python バージョン確認（pyenv-win）
+
+pyenv-win がインストール済みの場合:
+
+```powershell
+pyenv install 3.11.9   # 未インストールの場合
+pyenv local 3.11.9
+python --version       # Python 3.11.9 と表示されればOK
+```
+
+> **pyenv-win が入っていない場合:**
+> ```powershell
+> # Scoop 経由（推奨）
+> scoop install pyenv
+>
+> # または pip 経由
+> pip install pyenv-win --target "$HOME\.pyenv"
+> ```
+
+#### 2-W3. 依存パッケージをインストール
+
+```powershell
+cd C:\Users\yourname\projects\mcp-compressor
+pip install httpx pyyaml python-toon
+```
+
+#### 2-W4. 動作確認
+
+```powershell
+python mcp_proxy.py --help
+```
+
+---
+
+### WSL の場合
+
+#### 2-L1. リポジトリをクローン
 
 ```bash
-cd /path/to/mcp-summarizer
-uv sync
+cd ~/projects   # 任意のディレクトリ
+git clone https://github.com/zakkii-k/mcp-compressor.git
+cd mcp-compressor
+```
+
+#### 2-L2. Python バージョン確認（pyenv）
+
+pyenv がインストール済みの場合:
+
+```bash
+pyenv install 3.11.9   # 未インストールの場合
+pyenv local 3.11.9
+python --version       # Python 3.11.9 と表示されればOK
+```
+
+> **pyenv が入っていない場合:**
+> ```bash
+> curl https://pyenv.run | bash
+> # .bashrc または .zshrc に以下を追記
+> export PYENV_ROOT="$HOME/.pyenv"
+> export PATH="$PYENV_ROOT/bin:$PATH"
+> eval "$(pyenv init -)"
+> # シェルを再起動してから pyenv install 3.11.9
+> ```
+
+#### 2-L3. 依存パッケージをインストール
+
+```bash
+cd ~/projects/mcp-compressor
+pip install httpx pyyaml python-toon
+```
+
+#### 2-L4. 動作確認
+
+```bash
+python mcp_proxy.py --help
 ```
 
 ---
 
-## Step 4: GitHub Copilot の MCP 設定を変更
+## Step 3: GitHub Copilot の MCP 設定
 
-### VS Code の場合（`.vscode/mcp.json` または `settings.json`）
+VS Code の `.vscode/mcp.json`（またはユーザー設定の `settings.json`）を編集します。
 
-**変更前（直接 MCP サーバーを指定）:**
+---
+
+### Windows の場合
+
+VS Code が Windows 側で動いているため、Windows のパスを直接指定します。
+
+**変更前:**
 
 ```json
 {
@@ -150,25 +194,52 @@ uv sync
     "my-mcp-server": {
       "type": "stdio",
       "command": "node",
-      "args": ["/path/to/mcp-server.js"]
+      "args": ["C:\\path\\to\\mcp-server.js"]
     }
   }
 }
 ```
 
-**変更後（プロキシ経由）:**
+**変更後:**
 
 ```json
 {
   "servers": {
     "my-mcp-server": {
       "type": "stdio",
-      "command": "uv",
+      "command": "python",
       "args": [
-        "run",
-        "--project", "C:\\path\\to\\mcp-summarizer",
-        "python", "mcp_proxy.py",
-        "--config", "C:\\path\\to\\mcp-summarizer\\config.yaml",
+        "C:\\Users\\yourname\\projects\\mcp-compressor\\mcp_proxy.py",
+        "--config", "C:\\Users\\yourname\\projects\\mcp-compressor\\config.yaml",
+        "--",
+        "node", "C:\\path\\to\\mcp-server.js"
+      ]
+    }
+  }
+}
+```
+
+> `python` で pyenv-win の Python が使われるよう、`pyenv local 3.11.9` を
+> mcp-compressor ディレクトリで実行しておくこと。
+
+---
+
+### WSL の場合（Windows 側の VS Code から）
+
+VS Code が Windows 側で動いているため `wsl -e` を挟みます。
+
+**変更後:**
+
+```json
+{
+  "servers": {
+    "my-mcp-server": {
+      "type": "stdio",
+      "command": "wsl",
+      "args": [
+        "-e", "python",
+        "/home/yourname/projects/mcp-compressor/mcp_proxy.py",
+        "--config", "/home/yourname/projects/mcp-compressor/config.yaml",
         "--",
         "node", "/path/to/mcp-server.js"
       ]
@@ -177,76 +248,71 @@ uv sync
 }
 ```
 
-> **WSL2 経由で Python を動かす場合:**
-> ```json
-> {
->   "command": "wsl",
->   "args": ["-e", "uv", "run", "--project", "/path/to/mcp-summarizer",
->            "python", "mcp_proxy.py", "--", "node", "/path/to/server.js"]
-> }
-> ```
+> WSL 内で pyenv を使っている場合、`wsl -e python` は pyenv の Python を使います。
+> ただし WSL の初期化が毎回走るため、Windows 側に置く方法より若干起動が遅いです。
+
+---
 
 ### 複数の MCP サーバーがある場合
 
-各サーバーの `command` と `args` を上記のパターンでラップするだけです。`mcp_proxy.py` は `--` 以降を実際のサーバーコマンドとして起動します。
+各サーバーを個別にラップします。`mcp_proxy.py` は `--` 以降を実際のサーバーコマンドとして起動します。
 
----
-
-## Step 5: 動作確認
-
-### Ollama の疎通確認
-
-```powershell
-# 要約テスト
-$body = '{"model":"qwen2.5:3b","prompt":"以下を一文で要約: Pythonはシンプルで読みやすい文法を持つプログラミング言語です。","stream":false}'
-curl -X POST http://localhost:11434/api/generate -H "Content-Type: application/json" -d $body
-```
-
-### プロキシの単体テスト（echo コマンドで MCP を模擬）
-
-```powershell
-# Windows の場合（cmd/PowerShell）
-echo '{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"test response"}]}}' | `
-  uv run python mcp_proxy.py -- cmd /c type CON
-```
-
-### ログレベルを上げてデバッグ
-
-```powershell
-# INFO レベルで処理状況を確認
-uv run python mcp_proxy.py --log-level INFO -- node /path/to/server.js
+```json
+{
+  "servers": {
+    "server-a": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["C:\\...\\mcp_proxy.py", "--", "node", "C:\\...\\server-a.js"]
+    },
+    "server-b": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["C:\\...\\mcp_proxy.py", "--", "uvx", "mcp-server-fetch"]
+    }
+  }
+}
 ```
 
 ---
 
-## 設定のカスタマイズ
+## Step 4: 動作確認
 
-`config.yaml` で動作を細かく調整できます:
+### Ollama の疎通確認（共通）
 
-```yaml
-# 閾値を下げると要約が増える、上げると減る
-threshold_chars: 3000   # デフォルト: 5000
-
-# 特定のパイプラインステージを無効化
-pipeline:
-  - json_compressor     # JSON minify のみ（LLM 要約なし）
-  # - log_compressor    # ← コメントアウトで無効
-  # - llm_summarizer    # ← LLM 要約を無効にしたい場合
+```bash
+curl -s http://localhost:11434   # {"status":"Ollama is running"}
+docker exec ollama ollama list   # ダウンロード済みモデル一覧
 ```
 
----
+### パイプラインのテスト（Ollama 不要）
 
-## 元データの確認（可逆性）
+**Windows:**
 
-LLM 要約されたレスポンスには元データのファイルパスが含まれます:
-
-```
-[LLM要約済み | モデル: qwen2.5:3b | 元データ: originals/original_20240610_143022_123456.txt]
-
-（要約内容）
+```powershell
+cd C:\Users\yourname\projects\mcp-compressor
+python -m pytest tests/test_proxy.py -v
 ```
 
-`originals/` ディレクトリに元のレスポンスが保存されているため、必要に応じて参照できます。
+**WSL:**
+
+```bash
+cd ~/projects/mcp-compressor
+python -m pytest tests/test_proxy.py -v
+```
+
+Ollama が起動していれば LLM 要約テストも自動で有効になります。
+
+### MCP Inspector で対話確認（npx が使える場合）
+
+```bash
+npx @modelcontextprotocol/inspector \
+  python mcp_proxy.py --log-level INFO \
+  -- \
+  python tests/mock_server.py
+```
+
+ブラウザが `http://localhost:5173` で開き、ツールを呼び出して動作確認できます。
 
 ---
 
@@ -254,117 +320,62 @@ LLM 要約されたレスポンスには元データのファイルパスが含�
 
 ### Ollama に接続できない
 
-```powershell
-docker ps       # ollama コンテナが起動しているか確認
-docker logs ollama  # エラーログを確認
+```bash
+docker ps            # ollama コンテナが起動しているか
+docker start ollama  # 停止していた場合
+docker logs ollama   # エラーログ確認
 ```
 
-### モデルが見つからない
+### `python` コマンドが見つからない / バージョンが違う
 
-```powershell
-docker exec ollama ollama list   # インストール済みモデルを確認
-docker exec ollama ollama pull qwen2.5:3b   # 再度 pull
+```bash
+# pyenv のバージョン確認
+pyenv versions
+pyenv local 3.11.9   # プロジェクトディレクトリで実行
+python --version
 ```
 
-### Python パッケージが見つからない
+### `import httpx` エラー
 
-```powershell
-uv sync   # 依存関係を再インストール
+```bash
+pip install httpx pyyaml python-toon
 ```
 
 ### MCP サーバーが起動しない
 
-`--log-level DEBUG` オプションでプロキシのデバッグログを有効にして確認してください。
-
----
-
----
-
-## 動作確認: MCP Inspector で Copilot を使わずにテスト
-
-GitHub Copilot のトークンを消費せずに、プロキシ＋要約の動作を確認する方法です。
-
-### テスト構成
-
-```
-MCP Inspector (ブラウザ UI)
-        ↓ stdio
-  mcp_proxy.py        ← レスポンスをインターセプト
-        ↓ stdio
-  tests/mock_server.py ← 大きなレスポンスを返すモックサーバー
-```
-
-### A) pytest で自動テスト（推奨・最速）
-
-```powershell
-cd C:\path\to\mcp-summarizer
-
-# Ollama なしでパイプラインのみテスト（JSON圧縮・ログ圧縮）
-uv run pytest tests/test_proxy.py -v
-
-# Ollama 起動後にLLM要約も含めてテスト
-uv run pytest tests/test_proxy.py -v   # TestLLMSummarizer が自動で有効化される
-```
-
-テスト内容:
-| テスト | 確認内容 | Ollama 必要 |
-|--------|----------|-------------|
-| `test_handshake_works` | MCP 初期化が通る | 不要 |
-| `test_tools_list` | ツール一覧が取得できる | 不要 |
-| `test_small_response_passes_through` | 閾値以下はそのまま通過 | 不要 |
-| `test_json_compressor` | 大きな JSON が minify される | 不要 |
-| `test_log_compressor` | 大量ログが圧縮される | 不要 |
-| `test_large_text_is_summarized` | LLM 要約が動く | **必要** |
-| `test_original_is_saved` | 元データが保存される | **必要** |
-
-### B) MCP Inspector でブラウザから対話確認（npx が使える場合）
-
-```powershell
-# npx でインストール不要、その場実行
-npx @modelcontextprotocol/inspector `
-  uv run python mcp_proxy.py --log-level INFO `
-  -- `
-  python tests/mock_server.py
-```
-
-ブラウザが `http://localhost:5173` で開く。
-左ペインの **Tools** から以下のツールを呼び出して動作確認できる:
-
-| ツール名 | レスポンス | 期待される処理 |
-|----------|-----------|---------------|
-| `get_small_response` | 小さいテキスト | そのまま通過 |
-| `get_large_json` | 大きな JSON | minify されて返る |
-| `get_large_log` | 200行のログ | 先頭/エラー/末尾に圧縮 |
-| `get_large_text` | 大量テキスト | LLM 要約（Ollama 起動時のみ） |
-
-### C) コマンドラインで手動確認（最もシンプル）
-
-PowerShell:
-
-```powershell
-# モック → プロキシ の出力を直接見る（initializeレスポンスが返れば動作OK）
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' | `
-  uv run python mcp_proxy.py -- python tests/mock_server.py
-```
-
-WSL2:
-
 ```bash
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}
-{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_large_log","arguments":{}}}' \
-  | uv run python mcp_proxy.py -- python tests/mock_server.py
+# --log-level DEBUG でプロキシのログを確認
+python mcp_proxy.py --log-level DEBUG -- node /path/to/server.js
 ```
 
 ---
 
 ## アンインストール
 
-```powershell
-# Ollama コンテナの停止・削除
+```bash
+# Ollama コンテナとモデルデータをすべて削除
 docker stop ollama
 docker rm ollama
 docker volume rm ollama_data
 
-# モデルデータのみ削除（コンテナは残す）
+# モデルだけ削除してコンテナは残す場合
 docker exec ollama ollama rm qwen2.5:3b
 ```
+
+---
+
+## 動作確認: MCP Inspector（Copilot のトークンを使わずにテスト）
+
+| 方法 | コマンド | Ollama 必要 |
+|------|---------|------------|
+| pytest 自動テスト | `python -m pytest tests/test_proxy.py -v` | パイプラインのみなら不要 |
+| MCP Inspector | `npx @modelcontextprotocol/inspector python mcp_proxy.py -- python tests/mock_server.py` | LLM要約のみ必要 |
+
+テスト用ツール一覧:
+
+| ツール名 | 期待される処理 |
+|----------|--------------|
+| `get_small_response` | そのまま通過（閾値以下） |
+| `get_large_json` | TOON 変換または minify |
+| `get_large_log` | ログ重複除去・圧縮 |
+| `get_large_text` | LLM 要約（Ollama 起動時のみ） |
