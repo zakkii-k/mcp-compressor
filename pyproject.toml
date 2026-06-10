@@ -12,6 +12,9 @@ dependencies = [
 [project.scripts]
 mcp-compressor = "mcp_compressor.main:main"
 
+[project.optional-dependencies]
+bedrock = ["boto3>=1.34"]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",

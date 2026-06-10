@@ -10,6 +10,7 @@ from .toon_converter import ToonConverter
 from .log_compressor import LogCompressor
 from .log_deduplicator import LogDeduplicator
 from .llm_summarizer import LLMSummarizer
+from .bedrock_summarizer import BedrockSummarizer
 
 
 class Pipeline:
@@ -65,6 +66,16 @@ def build_pipeline(config: dict) -> Pipeline:
             originals_dir=config.get("originals_dir", "originals"),
         ))
 
+    if "bedrock_summarizer" in enabled:
+        bedrock_cfg = config.get("bedrock", {})
+        processors.append(BedrockSummarizer(
+            threshold_chars=config.get("threshold_chars", 5000),
+            model=bedrock_cfg.get("model", "us.google.gemma-3-27b-it-v1:0"),
+            region=bedrock_cfg.get("region", "us-east-1"),
+            originals_dir=config.get("originals_dir", "originals"),
+            profile=bedrock_cfg.get("profile"),
+        ))
+
     return Pipeline(processors)
 
 
@@ -73,5 +84,5 @@ __all__ = [
     "BaseProcessor",
     "JSONCompressor", "JSONTableConverter", "ToonConverter",
     "LogCompressor", "LogDeduplicator",
-    "LLMSummarizer",
+    "LLMSummarizer", "BedrockSummarizer",
 ]

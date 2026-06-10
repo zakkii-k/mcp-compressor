@@ -32,7 +32,18 @@ pipeline:
   # - json_table_converter # JSON配列をMarkdownテーブルに変換
   - log_deduplicator      # 繰り返しパターンのログを集約（最大98%削減、LLM不要）
   - log_compressor        # ログの先頭/エラー/末尾を抽出（LLM不要）
-  - llm_summarizer        # 上記で閾値以上なら LLM で要約
+  - llm_summarizer        # Ollama（ローカル LLM）で要約
+  # - bedrock_summarizer  # ← Ollama の代わりに Bedrock を使う場合はこちら
+
+# Bedrock 設定（bedrock_summarizer を使う場合）
+# aws sso login 済みであれば profile 不要
+# bedrock:
+#   model: "us.google.gemma-3-27b-it-v1:0"   # Gemma 3 27B（高品質）
+#   # model: "us.google.gemma-3-12b-it-v1:0" # Gemma 3 12B（バランス）
+#   # model: "us.google.gemma-3-4b-it-v1:0"  # Gemma 3 4B（安価・高速）
+#   # model: "amazon.nova-micro-v1:0"         # Nova Micro（最安）
+#   region: "us-east-1"
+#   # profile: "my-sso-profile"              # AWS プロファイル名（省略可）
 
 # ログ圧縮の詳細設定
 log_compressor:
