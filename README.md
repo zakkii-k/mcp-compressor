@@ -40,7 +40,8 @@ Copilot → mcp-compressor → 実際の MCP サーバー（子プロセス）
 
 #### wrap モード
 
-`mcp.servers.json` に書いた全サーバーに接続し、Copilot には1つのサーバーとして見せる。内部（stdio）・外部（SSE/HTTP）問わず一箇所でインターセプトできる。
+`mcp.servers.json` に書いた全サーバーに接続し、Copilot には1つのサーバーとして見せる。
+内部（stdio）・外部（SSE/HTTP）問わず一箇所でインターセプトできる。
 
 ```
 Copilot → mcp-compressor ┬→ filesystem サーバー（stdio）
@@ -70,71 +71,86 @@ mcp__invoke_tool(server, tool, args) ← ツールを実行する
 
 ## セットアップ
 
-詳細は [docs/setup.md](docs/setup.md) を参照。
+### 前提条件
 
-### 1. Ollama を起動
+- Windows 11
+- Rancher Desktop（Docker 利用のため）
+- Python 3.11 以上（インストール済みであれば pyenv 不要）
 
-WSL または PowerShell どちらでも同じ（Rancher Desktop が起動していれば `docker` が使える）:
+### 1. リポジトリをクローン（PowerShell）
 
-```bash
+```powershell
+cd C:\Users\ユーザー名\projects   # 任意のディレクトリ
+git clone https://github.com/zakkii-k/mcp-compressor.git
+cd mcp-compressor
+```
+
+以降のパス例は `C:\Users\ユーザー名\projects\mcp-compressor` として記載する。実際のパスに読み替えること。
+
+### 2. Ollama を起動
+
+WSL・PowerShell どちらでも同じ（Rancher Desktop が起動していれば `docker` が使える）。
+`docker compose up` はリポジトリ内で実行すること。
+
+```powershell
+# リポジトリ内で実行
 docker compose up -d
+
+# または docker run で起動（ディレクトリを問わない）
+docker run -d `
+  --name ollama `
+  -p 11434:11434 `
+  -v ollama_data:/root/.ollama `
+  --restart unless-stopped `
+  ollama/ollama:latest
+```
+
+モデルをダウンロード:
+
+```powershell
 docker exec ollama ollama pull qwen2.5:3b
 ```
 
-### 2. mcp-compressor のインストール
+### 3. mcp-compressor のインストール
 
-3通りある。**Docker が一番シンプル**。
+2通りある。**Docker が一番シンプル**。
 
 ---
 
 #### A. Docker（推奨・Python 環境不要）
 
-```bash
-git clone https://github.com/zakkii-k/mcp-compressor.git
-cd mcp-compressor
+```powershell
+cd C:\Users\ユーザー名\projects\mcp-compressor
 docker build -t mcp-compressor .
 ```
 
-VS Code の MCP 設定で `docker run` を指定するだけで動く。
+MCP 設定で `docker run` を指定するだけで動く。
 
 ---
 
-#### B. Windows ネイティブ Python（VS Code が Windows 側の場合）
+#### B. Windows ネイティブ Python
 
-VS Code が Windows で動いているなら、Python も Windows 側に置くのがシンプル。
-MCP 設定に `python` を直接書けばいい。
+Python が入っていれば pip だけでOK（pyenv 不要）。
 
 ```powershell
-# PowerShell または WSL から
-git clone https://github.com/zakkii-k/mcp-compressor.git
-cd mcp-compressor
-
-# pyenv-win でバージョン指定（インストール済みの場合）
-pyenv local 3.11.9
-
+cd C:\Users\ユーザー名\projects\mcp-compressor
 pip install httpx pyyaml python-toon
 ```
 
 ---
 
-#### C. WSL 内 Python（VS Code が Windows 側の場合は非推奨）
+### 4. mcp.json を編集
 
-WSL 内に置くと MCP 設定で `wsl -e python ...` を挟む必要があり冗長になる。
-WSL で VS Code を開いて開発する場合（`code .` を WSL から実行）は問題ない。
+VS Code のグローバル MCP 設定は以下にある:
 
-```bash
-git clone https://github.com/zakkii-k/mcp-compressor.git
-cd mcp-compressor
-pip install httpx pyyaml python-toon
+```
+C:\Users\ユーザー名\AppData\Roaming\Code\User\mcp.json
 ```
 
----
+> グローバル設定なのでパスは**絶対パス**で書くこと。
+> ワークスペースごとに設定する場合は `.vscode/mcp.json` を使う（相対パス可）。
 
-## 使い方
-
-### stdio モード
-
-既存の MCP 設定を `mcp-compressor` でラップする。
+#### stdio モード（サーバーを1つずつラップする場合）
 
 **変更前:**
 ```json
@@ -143,49 +159,63 @@ pip install httpx pyyaml python-toon
     "filesystem": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"]
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\path\\to\\dir"]
     }
   }
 }
 ```
 
-**変更後:**
+**変更後（Python）:**
 ```json
 {
   "servers": {
     "filesystem": {
       "type": "stdio",
       "command": "python",
-      "args": ["-m", "mcp_compressor", "--",
-               "npx", "-y", "@modelcontextprotocol/server-filesystem", "/path"]
+      "args": [
+        "-m", "mcp_compressor",
+        "--config", "C:\\Users\\ユーザー名\\projects\\mcp-compressor\\config.yaml",
+        "--",
+        "npx", "-y", "@modelcontextprotocol/server-filesystem", "C:\\path\\to\\dir"
+      ]
     }
   }
 }
 ```
 
-Docker の場合:
+**変更後（Docker）:**
 ```json
 {
-  "command": "docker",
-  "args": ["run", "--rm", "-i", "mcp-compressor", "--",
-           "npx", "-y", "@modelcontextprotocol/server-filesystem", "/path"]
+  "servers": {
+    "filesystem": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "mcp-compressor",
+        "--",
+        "npx", "-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"
+      ]
+    }
+  }
 }
 ```
 
-### wrap モード
+#### wrap モード（全サーバーを1エントリに集約する場合）
 
-全 MCP サーバーを1エントリに集約する。
+**Step 1:** 既存の mcp.json の `servers` 部分を `mcp.servers.json` としてリポジトリ内に保存。
 
-**Step 1:** 既存の `.vscode/mcp.json` の `servers` 部分を `mcp.servers.json` にコピー。
+```
+C:\Users\ユーザー名\projects\mcp-compressor\mcp.servers.json
+```
 
 ```json
-// mcp.servers.json
 {
   "servers": {
     "filesystem": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"]
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:\\path\\to\\dir"]
     },
     "atlassian": {
       "type": "sse",
@@ -197,7 +227,7 @@ Docker の場合:
 
 `mcp.servers.example.json` をコピーして編集してください。
 
-**Step 2:** `.vscode/mcp.json` を書き換え。
+**Step 2:** mcp.json を書き換え（Python）:
 
 ```json
 {
@@ -205,8 +235,33 @@ Docker の場合:
     "mcp-compressor": {
       "type": "stdio",
       "command": "python",
-      "args": ["-m", "mcp_compressor", "--mode", "wrap",
-               "--mcp-config", "mcp.servers.json"]
+      "args": [
+        "-m", "mcp_compressor",
+        "--mode", "wrap",
+        "--config", "C:\\Users\\ユーザー名\\projects\\mcp-compressor\\config.yaml",
+        "--mcp-config", "C:\\Users\\ユーザー名\\projects\\mcp-compressor\\mcp.servers.json"
+      ]
+    }
+  }
+}
+```
+
+**Step 2:** mcp.json を書き換え（Docker）:
+
+```json
+{
+  "servers": {
+    "mcp-compressor": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-v", "C:\\Users\\ユーザー名\\projects\\mcp-compressor\\mcp.servers.json:/app/mcp.servers.json",
+        "-v", "C:\\Users\\ユーザー名\\projects\\mcp-compressor\\config.yaml:/app/config.yaml",
+        "-v", "C:\\Users\\ユーザー名\\projects\\mcp-compressor\\originals:/app/originals",
+        "mcp-compressor",
+        "--mode", "wrap"
+      ]
     }
   }
 }
@@ -218,9 +273,6 @@ Docker の場合:
 mcp__list_tools   → query="atlassian" で Jira 関連ツールを検索できる
 mcp__invoke_tool  → server="atlassian", tool="create_issue" で実行
 ```
-
-`mcp__list_tools` の description にサーバー名と主要ツールが含まれるため、
-Copilot はユーザーの意図に応じた query を組み立てられる。
 
 プレフィックス方式に戻す場合は `--no-meta-tools` を追加。
 
@@ -281,7 +333,7 @@ pipeline:
 
 Ollama なしでパイプラインと wrap モードのテストが実行できる。
 
-```bash
+```powershell
 pip install pytest
 pytest tests/ -v
 ```
@@ -305,10 +357,10 @@ mcp-compressor/
 │   │   ├── json_table_converter.py
 │   │   └── llm_summarizer.py
 │   └── proxy/
-│       ├── stdio_proxy.py     # stdio モード（ローカル MCP）
-│       ├── wrap_proxy.py      # wrap モード（全 MCP を集約）
+│       ├── stdio_proxy.py        # stdio モード（ローカル MCP）
+│       ├── wrap_proxy.py         # wrap モード（全 MCP を集約）
 │       ├── server_connection.py  # stdio/SSE サーバー接続管理
-│       └── http_proxy.py      # HTTP モード（未実装・スタブ）
+│       └── http_proxy.py         # HTTP モード（未実装・スタブ）
 ├── tests/
 ├── docs/
 │   ├── setup.md
