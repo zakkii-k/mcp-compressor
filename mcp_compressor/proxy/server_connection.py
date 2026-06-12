@@ -1,7 +1,8 @@
 """各 MCP サーバーへの接続を管理するモジュール。
 
-stdio サーバー: 子プロセスとして起動して stdin/stdout で通信
-SSE サーバー  : HTTP 接続を維持してリクエスト/レスポンスを処理
+stdio サーバー        : 子プロセスとして起動して stdin/stdout で通信
+SSE サーバー          : HTTP 接続を維持してリクエスト/レスポンスを処理（旧仕様）
+Streamable HTTP サーバー: JSON-RPC を直接 POST（MCP 2025-03-26、OAuth 対応）
 """
 
 import json
@@ -191,12 +192,97 @@ class SSEServerConnection(BaseServerConnection):
         self._client.close()
 
 
+class StreamableHttpServerConnection(BaseServerConnection):
+    """Streamable HTTP (MCP 2025-03-26) ベースの接続。
+
+    JSON-RPC メッセージを直接 POST し、JSON または SSE 形式のレスポンスを処理する。
+    Authorization ヘッダーが未指定の場合は OAuth 2.0 PKCE フローで自動認証する。
+    """
+
+    def __init__(self, name: str, config: dict) -> None:
+        super().__init__(name)
+        self.url = config["url"].rstrip("/")
+        self._extra_headers: dict = config.get("headers", {})
+        self._client = httpx.Client(timeout=60.0)
+
+        # Authorization ヘッダーが明示されていなければ OAuth を試みる
+        if "Authorization" not in self._extra_headers:
+            from .oauth_client import OAuthClient
+            self._oauth: "OAuthClient | None" = OAuthClient(name, self.url)
+        else:
+            self._oauth = None
+
+    def connect(self) -> None:
+        self._do_handshake()
+
+    def _build_headers(self) -> dict:
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        }
+        headers.update(self._extra_headers)
+        if self._oauth:
+            try:
+                headers["Authorization"] = f"Bearer {self._oauth.get_access_token()}"
+            except Exception as e:
+                raise ConnectionError(f"{self.name}: OAuth 認証失敗: {e}") from e
+        return headers
+
+    def _post(self, msg: dict) -> httpx.Response:
+        resp = self._client.post(self.url, json=msg, headers=self._build_headers())
+        if resp.status_code == 401 and self._oauth:
+            self._oauth.invalidate()
+            resp = self._client.post(self.url, json=msg, headers=self._build_headers())
+        resp.raise_for_status()
+        return resp
+
+    def _request(self, method: str, params: dict) -> Any:
+        req_id = self._next_id()
+        msg = {"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}
+        resp = self._post(msg)
+        ct = resp.headers.get("content-type", "")
+        if "text/event-stream" in ct:
+            return self._extract_from_sse(resp.text, req_id)
+        data = resp.json()
+        if "error" in data:
+            raise RuntimeError(f"{self.name}: {data['error']}")
+        return data.get("result")
+
+    def _extract_from_sse(self, text: str, req_id: int) -> Any:
+        """SSE レスポンスのボディから指定 id のメッセージを取り出す。"""
+        for line in text.splitlines():
+            if not line.startswith("data:"):
+                continue
+            raw = line[5:].strip()
+            try:
+                msg = json.loads(raw)
+                if msg.get("id") == req_id:
+                    if "error" in msg:
+                        raise RuntimeError(f"{self.name}: {msg['error']}")
+                    return msg.get("result")
+            except json.JSONDecodeError:
+                pass
+        return None
+
+    def _notify(self, method: str, params: dict) -> None:
+        msg = {"jsonrpc": "2.0", "method": method, "params": params}
+        try:
+            self._post(msg)
+        except Exception as e:
+            logger.debug("%s: 通知送信エラー（無視）: %s", self.name, e)
+
+    def close(self) -> None:
+        self._client.close()
+
+
 def create_connection(name: str, config: dict) -> BaseServerConnection:
     """設定からサーバー接続オブジェクトを生成するファクトリ関数。"""
     server_type = config.get("type", "stdio")
     if server_type == "stdio":
         return StdioServerConnection(name, config)
-    elif server_type in ("sse", "http"):
+    elif server_type == "sse":
         return SSEServerConnection(name, config)
+    elif server_type in ("http", "streamable_http"):
+        return StreamableHttpServerConnection(name, config)
     else:
-        raise ValueError(f"未対応のサーバータイプ: {server_type} (stdio / sse)")
+        raise ValueError(f"未対応のサーバータイプ: {server_type} (stdio / sse / streamable_http)")

@@ -10,7 +10,21 @@
       "command": "uvx",
       "args": ["mcp-server-fetch"]
     },
-    "atlassian": {
+
+    "confluence": {
+      "type": "streamable_http",
+      "url": "https://mcp.atlassian.com/v1/mcp"
+    },
+
+    "confluence-with-token": {
+      "type": "streamable_http",
+      "url": "https://mcp.atlassian.com/v1/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_ATLASSIAN_API_TOKEN"
+      }
+    },
+
+    "atlassian-sse-legacy": {
       "type": "sse",
       "url": "https://mcp.atlassian.com/v1/sse"
     }
