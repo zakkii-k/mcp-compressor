@@ -6,8 +6,18 @@ services:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
     ports:
       - "4317:4317"   # OTLP gRPC
-      - "4318:4318"   # OTLP HTTP  ← mcp-compressor はここに送る
+      - "4318:4318"   # OTLP HTTP ← mcp-compressor と Copilot がここに送る
       - "8889:8889"   # Prometheus scrape エンドポイント
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.5.0
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo-config.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"   # Tempo HTTP API（Grafana が使う）
     restart: unless-stopped
 
   prometheus:
@@ -35,6 +45,8 @@ services:
     restart: unless-stopped
     depends_on:
       - prometheus
+      - tempo
 
 volumes:
   grafana-data:
+  tempo-data:

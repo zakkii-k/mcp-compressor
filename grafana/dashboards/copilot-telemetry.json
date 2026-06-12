@@ -1,0 +1,164 @@
+{
+  "title": "GitHub Copilot Telemetry",
+  "uid": "copilot-telemetry",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 3 },
+      "options": {
+        "mode": "markdown",
+        "content": "## GitHub Copilot Telemetry\nVS Code の設定 `github.copilot.chat.otel.enabled: true` を有効にすると、Copilot が LLM を呼ぶたびにトレースデータが Tempo に蓄積されます。**データが表示されない場合は、VS Code で Copilot を使ってから数秒待ってください。**"
+      }
+    },
+    {
+      "id": 2,
+      "title": "LLM 呼び出し回数",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 3, "w": 6, "h": 4 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "options": { "reduceOptions": { "calcs": ["sum"] }, "colorMode": "background" },
+      "targets": [{
+        "datasource": { "type": "tempo", "uid": "tempo" },
+        "queryType": "traceqlMetrics",
+        "query": "{ span.gen_ai.operation.name =~ \".+\" } | rate()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 3,
+      "title": "入力トークン合計（推定）",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 3, "w": 6, "h": 4 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "options": { "reduceOptions": { "calcs": ["sum"] }, "colorMode": "background" },
+      "targets": [{
+        "datasource": { "type": "tempo", "uid": "tempo" },
+        "queryType": "traceqlMetrics",
+        "query": "{ span.gen_ai.usage.input_tokens > 0 } | sum(span.gen_ai.usage.input_tokens)",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 4,
+      "title": "出力トークン合計",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 3, "w": 6, "h": 4 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "options": { "reduceOptions": { "calcs": ["sum"] }, "colorMode": "background" },
+      "targets": [{
+        "datasource": { "type": "tempo", "uid": "tempo" },
+        "queryType": "traceqlMetrics",
+        "query": "{ span.gen_ai.usage.output_tokens > 0 } | sum(span.gen_ai.usage.output_tokens)",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 5,
+      "title": "ツール呼び出し回数",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 3, "w": 6, "h": 4 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "options": { "reduceOptions": { "calcs": ["sum"] }, "colorMode": "value" },
+      "targets": [{
+        "datasource": { "type": "tempo", "uid": "tempo" },
+        "queryType": "traceqlMetrics",
+        "query": "{ span.mcp.method =~ \".+\" || name =~ \".*tool.*\" } | rate()",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 6,
+      "title": "入出力トークン数（時系列）",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 7, "w": 16, "h": 8 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "options": { "tooltip": { "mode": "multi" } },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [
+        {
+          "datasource": { "type": "tempo", "uid": "tempo" },
+          "queryType": "traceqlMetrics",
+          "query": "{ span.gen_ai.usage.input_tokens > 0 } | sum(span.gen_ai.usage.input_tokens)",
+          "legendFormat": "入力トークン",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "tempo", "uid": "tempo" },
+          "queryType": "traceqlMetrics",
+          "query": "{ span.gen_ai.usage.output_tokens > 0 } | sum(span.gen_ai.usage.output_tokens)",
+          "legendFormat": "出力トークン",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "モデル別 LLM 呼び出し",
+      "type": "piechart",
+      "gridPos": { "x": 16, "y": 7, "w": 8, "h": 8 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [{
+        "datasource": { "type": "tempo", "uid": "tempo" },
+        "queryType": "traceqlMetrics",
+        "query": "{ span.gen_ai.request.model =~ \".+\" } | rate() by (span.gen_ai.request.model)",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 8,
+      "title": "LLM 呼び出しレイテンシ（ms）",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 15, "w": 12, "h": 7 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "fieldConfig": { "defaults": { "unit": "ms" } },
+      "targets": [{
+        "datasource": { "type": "tempo", "uid": "tempo" },
+        "queryType": "traceqlMetrics",
+        "query": "{ span.gen_ai.operation.name =~ \".+\" } | avg(duration)",
+        "legendFormat": "平均レイテンシ",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 9,
+      "title": "最近のトレース（Copilot LLM 呼び出し）",
+      "type": "table",
+      "gridPos": { "x": 12, "y": 15, "w": 12, "h": 7 },
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [{
+        "datasource": { "type": "tempo", "uid": "tempo" },
+        "queryType": "traceql",
+        "query": "{ span.gen_ai.usage.input_tokens > 0 }",
+        "limit": 20,
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 10,
+      "title": "mcp-compressor との比較（推定削減トークン vs Copilot 入力トークン）",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 22, "w": 24, "h": 8 },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "datasource": { "type": "tempo", "uid": "tempo" },
+          "queryType": "traceqlMetrics",
+          "query": "{ span.gen_ai.usage.input_tokens > 0 } | sum(span.gen_ai.usage.input_tokens)",
+          "legendFormat": "Copilot 入力トークン（実測）",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(mcp_compressor_tokens_input_sum[1m])) - sum(rate(mcp_compressor_tokens_output_sum[1m]))",
+          "legendFormat": "mcp-compressor 削減トークン（推定）",
+          "refId": "B"
+        }
+      ]
+    }
+  ]
+}
