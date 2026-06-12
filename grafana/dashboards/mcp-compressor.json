@@ -1,0 +1,121 @@
+{
+  "title": "MCP Compressor",
+  "uid": "mcp-compressor",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "トークン削減率（推定）",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "unit": "percentunit", "colorMode": "background" },
+      "targets": [{
+        "expr": "1 - sum(rate(mcp_compressor_tokens_output_sum[5m])) / sum(rate(mcp_compressor_tokens_input_sum[5m]))",
+        "legendFormat": "削減率"
+      }]
+    },
+    {
+      "id": 2,
+      "title": "文字削減率",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "unit": "percentunit", "colorMode": "background" },
+      "targets": [{
+        "expr": "1 - sum(rate(mcp_compressor_chars_output_sum[5m])) / sum(rate(mcp_compressor_chars_input_sum[5m]))",
+        "legendFormat": "削減率"
+      }]
+    },
+    {
+      "id": 3,
+      "title": "累積削減トークン数",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "unit": "short" },
+      "targets": [{
+        "expr": "sum(mcp_compressor_tokens_input_sum) - sum(mcp_compressor_tokens_output_sum)",
+        "legendFormat": "削減トークン"
+      }]
+    },
+    {
+      "id": 4,
+      "title": "リクエスト数",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{
+        "expr": "sum(mcp_compressor_requests_total)",
+        "legendFormat": "total"
+      }]
+    },
+    {
+      "id": 5,
+      "title": "入出力トークン数（時系列）",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "sum(rate(mcp_compressor_tokens_input_sum[1m]))",
+          "legendFormat": "入力（推定トークン/秒）"
+        },
+        {
+          "expr": "sum(rate(mcp_compressor_tokens_output_sum[1m]))",
+          "legendFormat": "出力（推定トークン/秒）"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "サーバー別 削減トークン数",
+      "type": "bargauge",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "options": { "orientation": "horizontal", "reduceOptions": { "calcs": ["sum"] } },
+      "targets": [{
+        "expr": "sum by (server) (mcp_compressor_tokens_input_sum) - sum by (server) (mcp_compressor_tokens_output_sum)",
+        "legendFormat": "{{server}}"
+      }]
+    },
+    {
+      "id": 7,
+      "title": "ステージ別 文字削減量",
+      "type": "bargauge",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "options": { "orientation": "horizontal", "reduceOptions": { "calcs": ["sum"] } },
+      "targets": [{
+        "expr": "sum by (stage) (mcp_compressor_stage_chars_input_sum) - sum by (stage) (mcp_compressor_stage_chars_output_sum)",
+        "legendFormat": "{{stage}}"
+      }]
+    },
+    {
+      "id": 8,
+      "title": "ステージ別 平均処理時間 (ms)",
+      "type": "bargauge",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "options": { "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{
+        "expr": "sum by (stage) (rate(mcp_compressor_stage_duration_sum[5m])) / sum by (stage) (rate(mcp_compressor_stage_duration_count[5m]))",
+        "legendFormat": "{{stage}}"
+      }]
+    },
+    {
+      "id": 9,
+      "title": "ツール別 圧縮率",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum by (server, tool) (mcp_compressor_tokens_input_sum)",
+          "legendFormat": "{{server}} / {{tool}}",
+          "instant": true
+        },
+        {
+          "expr": "sum by (server, tool) (mcp_compressor_tokens_output_sum)",
+          "legendFormat": "{{server}} / {{tool}}",
+          "instant": true
+        }
+      ]
+    }
+  ]
+}

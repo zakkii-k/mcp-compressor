@@ -17,15 +17,39 @@ class Pipeline:
     def __init__(self, processors: list[BaseProcessor]) -> None:
         self.processors = processors
 
-    def process(self, text: str) -> tuple[str, bool]:
+    def process(
+        self,
+        text: str,
+        *,
+        server: str = "",
+        tool: str = "",
+    ) -> tuple[str, bool]:
         """全プロセッサを順に適用する。戻り値: (最終テキスト, いずれかで変更されたか)"""
+        from mcp_compressor.telemetry import metrics, token_counter
+
         any_modified = False
         current = text
+
         for processor in self.processors:
+            stage_name = type(processor).__name__
+            text_before = current
+            t0 = __import__("time").monotonic()
             result, modified = processor.process(current)
+            elapsed_ms = (__import__("time").monotonic() - t0) * 1000
             if modified:
                 current = result
                 any_modified = True
+            metrics.record_stage(stage_name, len(text_before), len(current), elapsed_ms)
+
+        metrics.record_request(
+            chars_in=len(text),
+            chars_out=len(current),
+            tokens_in=token_counter.count(text),
+            tokens_out=token_counter.count(current),
+            modified=any_modified,
+            server=server,
+            tool=tool,
+        )
         return current, any_modified
 
 

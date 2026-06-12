@@ -214,9 +214,9 @@ class WrapProxy(BaseProxy):
             result = conn.call_tool(tool_name, arguments)
         except Exception as e:
             return _error_result(f"ツール呼び出しエラー ({server_name}/{tool_name}): {e}")
-        return self._apply_pipeline(result)
+        return self._apply_pipeline(result, server=server_name, tool=tool_name)
 
-    def _apply_pipeline(self, result: dict) -> dict:
+    def _apply_pipeline(self, result: dict, server: str = "", tool: str = "") -> dict:
         content = result.get("content", [])
         text_items = [
             c for c in content
@@ -225,7 +225,7 @@ class WrapProxy(BaseProxy):
         if not text_items:
             return result
         combined = "\n".join(c["text"] for c in text_items)
-        processed, was_modified = self.pipeline.process(combined)
+        processed, was_modified = self.pipeline.process(combined, server=server, tool=tool)
         if not was_modified:
             return result
         non_text = [c for c in content if c.get("type") != "text"]

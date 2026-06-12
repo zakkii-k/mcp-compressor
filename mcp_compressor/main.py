@@ -63,8 +63,10 @@ def main() -> None:
 
     from mcp_compressor.config import load_config
     from mcp_compressor.pipeline import build_pipeline
+    from mcp_compressor.telemetry import setup as setup_telemetry
 
     config = load_config(args.config)
+    setup_telemetry(config)
     pipeline = build_pipeline(config)
 
     if args.mode == "stdio":
