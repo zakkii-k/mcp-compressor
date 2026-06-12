@@ -1,6 +1,10 @@
 server:
   http_listen_port: 3200
 
+# 外部への使用状況レポートを無効化
+usage_report:
+  reporting_enabled: false
+
 distributor:
   receivers:
     otlp:
