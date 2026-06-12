@@ -1,7 +1,7 @@
 """テレメトリモジュール。
 
-config に telemetry.enabled: true があれば OTel SDK を初期化する。
-opentelemetry パッケージが未インストールでも動作する（no-op）。
+config に telemetry.enabled: true があれば telemetry/server.py へのデータ送信を開始する。
+外部パッケージ不要・外部への通信なし。
 """
 
 from __future__ import annotations
@@ -14,9 +14,8 @@ def setup(config: dict) -> None:
     tel = config.get("telemetry", {})
     if not tel.get("enabled", False):
         return
-    endpoint     = tel.get("endpoint",     "http://localhost:4318")
-    service_name = tel.get("service_name", "mcp-compressor")
-    metrics.init(endpoint, service_name)
+    endpoint = tel.get("endpoint", "http://localhost:4318")
+    metrics.init(endpoint)
 
 
 __all__ = ["setup", "metrics", "token_counter"]

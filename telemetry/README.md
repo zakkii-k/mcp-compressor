@@ -1,49 +1,35 @@
-# mcp-compressor telemetry stack
+# mcp-compressor telemetry
 
-mcp-compressor の圧縮効果と GitHub Copilot のトークン使用量を Grafana で可視化するための Docker スタックです。
+mcp-compressor の圧縮効果と GitHub Copilot のトークン使用量を可視化するサーバーです。
 
-**mcp-compressor 本体のコードは含まれていません。**  
-このディレクトリだけ入手すれば計測インフラとして動作します。
-
----
-
-## 含まれるもの
-
-```
-telemetry/
-  docker-compose.yml            ← 起動はここから
-  otel-collector-config.yaml    ← メトリクス（→Prometheus）とトレース（→Tempo）の振り分け設定
-  prometheus.yml                ← スクレイプ設定
-  tempo-config.yaml             ← トレース DB 設定
-  grafana/
-    provisioning/               ← 起動時に自動でデータソース・ダッシュボードを登録
-    dashboards/
-      mcp-compressor.json       ← 圧縮率ダッシュボード（Prometheus）
-      copilot-telemetry.json    ← Copilot トークン使用量ダッシュボード（Tempo）
-```
+**外部パッケージ不要 / 外部への通信なし / Python 標準ライブラリのみ**
 
 ---
 
-## 起動
+## 起動方法
+
+### Python で直接起動（推奨）
+
+```bash
+python server.py
+```
+
+### Docker で起動
 
 ```bash
 docker compose up -d
 ```
 
-| サービス | URL |
+| ポート | 用途 |
 |---|---|
-| **Grafana**（ダッシュボード） | http://localhost:3000 |
-| Prometheus | http://localhost:9090 |
-| Tempo | http://localhost:3200 |
-| otel-collector（受信口） | localhost:**4318** |
-
-ログイン不要。Grafana を開くと「MCP Compressor」と「GitHub Copilot Telemetry」のダッシュボードが自動で表示されます。
+| **3000** | ダッシュボード → http://localhost:3000 |
+| **4318** | データ受信口（mcp-compressor と Copilot が送信） |
 
 ---
 
 ## データを送る側の設定
 
-### mcp-compressor からメトリクスを送る
+### mcp-compressor
 
 `config.yaml` に追記：
 
@@ -53,15 +39,11 @@ telemetry:
   endpoint: "http://localhost:4318"
 ```
 
-依存パッケージのインストール（mcp-compressor のプロジェクトで実行）：
+（外部パッケージのインストールは不要になりました。tiktoken でトークン推定精度を上げたい場合のみ `pip install tiktoken`）
 
-```powershell
-pip install "mcp-compressor[telemetry-tokens]"
-```
+### GitHub Copilot（VS Code）
 
-### GitHub Copilot からトレースを送る
-
-VS Code の settings.json に追記：
+VS Code の `settings.json` に追記：
 
 ```json
 "github.copilot.chat.otel.enabled": true,
@@ -73,18 +55,19 @@ VS Code の settings.json に追記：
 
 ---
 
-## 停止
+## オプション
 
-```bash
-docker compose down        # コンテナ停止（データは保持）
-docker compose down -v     # コンテナ停止 + データ全削除
+```
+python server.py --ingest-port 4318 --dashboard-port 3000 --db telemetry.db
 ```
 
 ---
 
-## 詳細ドキュメント
+## セキュリティ・ライセンス
 
-mcp-compressor 本体のリポジトリの `docs/telemetry/` を参照してください：
-
-- `setup.md` … 手順の詳細・トラブルシューティング
-- `how-it-works.md` … 各メトリクス・トレースの意味とダッシュボードの読み方
+| 項目 | 内容 |
+|---|---|
+| 外部通信 | **なし**（全データはローカル SQLite に保存） |
+| 依存パッケージ | **なし**（Python 3.11+ stdlib のみ） |
+| ライセンス | Python Software Foundation License（商用利用可） |
+| Docker イメージ | `python:3.11-slim`（PSF License、外部送信なし） |
