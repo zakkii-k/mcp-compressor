@@ -33,16 +33,17 @@ mcp-compressor がどの程度レスポンスを圧縮しているか、GitHub C
 
 ## ステップ 1：Docker スタックを起動する
 
-プロジェクトルートで実行：
+テレメトリ用の設定ファイルはすべて **`telemetry/` ディレクトリ**にまとめてあります。
 
 ```bash
-docker compose -f docker-compose.telemetry.yml up -d
+cd telemetry
+docker compose up -d
 ```
 
 起動を確認：
 
 ```bash
-docker compose -f docker-compose.telemetry.yml ps
+docker compose ps
 ```
 
 全コンテナが `running` になったら OK。起動に10〜20秒かかることがあります。
@@ -53,6 +54,8 @@ docker compose -f docker-compose.telemetry.yml ps
 | Prometheus | http://localhost:9090 | メトリクス確認（上級者向け） |
 | Tempo | http://localhost:3200 | トレース確認（上級者向け） |
 | otel-collector | localhost:4318 | データ受信口（直接は開かない） |
+
+> **mcp-compressor を fork していない場合:** `telemetry/` ディレクトリだけ入手して `docker compose up -d` するだけで動きます。
 
 ---
 
@@ -123,7 +126,11 @@ http://localhost:3000 を開きます（ログイン不要）。
 
 **「No data」と表示される**
 
-- Docker スタックが起動しているか確認: `docker compose -f docker-compose.telemetry.yml ps`
+```bash
+cd telemetry
+docker compose ps   # 全コンテナが running か確認
+```
+
 - VS Code を再起動したか確認
 - 時間範囲を「Last 5 minutes」に変更してみる
 
@@ -135,9 +142,9 @@ http://localhost:3000 を開きます（ログイン不要）。
 **Docker が起動しない**
 
 ```bash
-# ログを確認する
-docker compose -f docker-compose.telemetry.yml logs otel-collector
-docker compose -f docker-compose.telemetry.yml logs tempo
+cd telemetry
+docker compose logs otel-collector
+docker compose logs tempo
 ```
 
 ---
@@ -145,11 +152,12 @@ docker compose -f docker-compose.telemetry.yml logs tempo
 ## 停止する
 
 ```bash
-docker compose -f docker-compose.telemetry.yml down
+cd telemetry
+docker compose down
 ```
 
 データを全部消す場合：
 
 ```bash
-docker compose -f docker-compose.telemetry.yml down -v
+docker compose down -v
 ```
